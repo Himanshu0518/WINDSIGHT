@@ -1,0 +1,9 @@
+# Build context bloat / host-specific files
+node_modules/
+dist/
+*.log
+
+# Environment files - VITE_* is injected via --build-arg instead
+.env
+.env.*
+!.env.example

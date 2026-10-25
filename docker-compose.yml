@@ -1,0 +1,76 @@
+# WindSight – one-command startup
+#
+#   docker compose up
+#
+# Both images are pulled from Docker Hub automatically.
+# Override defaults by creating a .env file from .env.example.
+#
+# To use fresh local data instead of what is baked into the image:
+#   docker compose --profile local-data up
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: windsight-api:latest
+    container_name: windsight-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Allow the frontend container and local dev origins. Comma-separate extra origins.
+      CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173"
+      # Dataset date range baked into the image
+      DELIVERY_FROM: "${DELIVERY_FROM:-2026-01-01}"
+      DELIVERY_TO: "${DELIVERY_TO:-2026-01-31}"
+      # Decision cutoff rule
+      DECISION_CUTOFF_HOUR: "${DECISION_CUTOFF_HOUR:-10}"
+      DECISION_CUTOFF_MINUTE: "${DECISION_CUTOFF_MINUTE:-0}"
+      DECISION_CUTOFF_TIMEZONE: "${DECISION_CUTOFF_TIMEZONE:-Europe/London}"
+      DECISION_CUTOFF_LEAD_DAYS: "${DECISION_CUTOFF_LEAD_DAYS:-1}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4); sys.exit(0 if r.status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: "http://localhost:8000"
+    image: windsight-web:latest
+    container_name: windsight-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # ── optional: mount local data instead of the image's baked-in data ──
+  # Run with:  docker compose --profile local-data up
+  api-local-data:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: windsight-api:latest
+    container_name: windsight-api-local
+    profiles: ["local-data"]
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173"
+      DATA_DIR: /app/data
+    volumes:
+      - ./backend/data:/app/data:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4); sys.exit(0 if r.status == 200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

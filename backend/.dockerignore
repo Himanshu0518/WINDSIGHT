@@ -1,0 +1,16 @@
+# Python tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Not needed at runtime
+tests/
+README.md
+data/raw/
+
+# Never ship environment files
+.env
+.env.local
