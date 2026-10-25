@@ -61,49 +61,7 @@ Analysis conducted across the complete UK national wind fleet for January 2026 (
 
 The solution uses a decoupled client-server architecture designed for zero cold-start latency, strict time-travel prevention, and offline resilience:
 
-```mermaid
-flowchart TD
-    subgraph DataIngestion ["Data Ingestion & Normalisation (Offline / Batch)"]
-        Elexon["Elexon BMRS API (v1)"]
-        Script["scripts/download_data.py"]
-        RawActuals["backend/data/raw/fuelhh_*.json"]
-        RawForecasts["backend/data/raw/windfor_*.json"]
-        NormalizedActuals["backend/data/actuals.json"]
-        NormalizedForecasts["backend/data/forecasts.json"]
-        AnalysisDataset["backend/data/analysis.json"]
-        
-        Elexon -->|"7-day chunks (FUELHH, WIND)"| Script
-        Elexon -->|"7-day chunks (WINDFOR, all versions)"| Script
-        Script --> RawActuals
-        Script --> RawForecasts
-        Script -->|"Settlement period deduplication"| NormalizedActuals
-        Script -->|"Full publication history"| NormalizedForecasts
-        Script -->|"Apply Cutoff Rule & 1-to-2 Broadcast"| AnalysisDataset
-    end
-
-    subgraph BackendAPI ["Backend Service (FastAPI)"]
-        Store["In-Memory Analysis Store (Zero Disk/Net I/O on Requests)"]
-        Routes["HTTP Endpoints (/overview, /forecasts, /accuracy, /forecast-evolution)"]
-        MetricsEngine["Metrics Engine (MAE, RMSE, Bias, MAPE)"]
-        
-        AnalysisDataset -->|"Loaded at lifespan startup"| Store
-        NormalizedForecasts -->|"Loaded at lifespan startup"| Store
-        Store --> Routes
-        Store --> MetricsEngine
-    end
-
-    subgraph FrontendApp ["Frontend Application (React 19 + Vite)"]
-        Router["React Router v7"]
-        Dashboard["Dashboard View (KPI Cards, Dual Series, Trend, Table)"]
-        PredictionView["Prediction Data View (Evolution Revisions Chart)"]
-        ActualsView["Actual Data View (Metered FUELHH Outturn)"]
-        Theme["Theme & Health Providers"]
-        
-        Routes -->|"JSON API (HTTP/CORS)"| Dashboard
-        Routes -->|"JSON API (HTTP/CORS)"| PredictionView
-        Routes -->|"JSON API (HTTP/CORS)"| ActualsView
-    end
-```
+![System Architecture](mermaid-diagram.png)
 
 ---
 
@@ -137,7 +95,8 @@ windsight/
 ├── .gitignore                 # Git ignore rules (node_modules, venvs, caches)
 ├── docker-compose.yml         # Multi-container orchestration (API + Web)
 ├── README.md                  # Comprehensive production documentation
-├── Requirements.md.md         # Original client specification & deliverables
+├── Requirements.md            # Original client specification & deliverables
+├── mermaid-diagram.png        # System architecture diagram
 │
 ├── backend/                   # Python FastAPI Backend
 │   ├── Dockerfile             # Multi-stage production Python 3.13 image
@@ -219,8 +178,8 @@ Run both the FastAPI backend and React frontend via Docker Compose:
 
 ```bash
 # Clone the repository
-git clone https://github.com/Himanshu0518/WINDSIGHT.git
-cd WINDSIGHT
+git clone https://github.com/Himanshu0518/hs-1234-ss-abc.git
+cd hs-1234-ss-abc
 
 # Build and start both containers
 docker compose up --build
