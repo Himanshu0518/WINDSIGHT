@@ -18,9 +18,9 @@ An enterprise-grade forecasting intelligence platform built for **UK Energy Util
 
 | Component | Target Platform | Live URL / Status | Interactive Docs |
 |---|---|---|---|
-| **Frontend Web App** | Vercel | `https://windsight-web.vercel.app` *(Replace with deployed URL)* | [Application UI](/) |
-| **Backend REST API** | Heroku / Render / Docker | `https://windsight-api.herokuapp.com` *(Replace with deployed URL)* | [/docs (Swagger UI)](/docs) |
-| **Service Healthcheck** | Backend Service | `https://windsight-api.herokuapp.com/health` | [/health](/health) |
+| **Frontend Web App** | Vercel | [https://wind-sight-flax.vercel.app](https://wind-sight-flax.vercel.app) | [Application UI](https://wind-sight-flax.vercel.app) |
+| **Backend REST API** | Render | [https://hs-1234-ss-abc.onrender.com](https://hs-1234-ss-abc.onrender.com) | [/docs (Swagger UI)](https://hs-1234-ss-abc.onrender.com/docs) |
+| **Service Healthcheck** | Render | [https://hs-1234-ss-abc.onrender.com/health](https://hs-1234-ss-abc.onrender.com/health) | [/health](https://hs-1234-ss-abc.onrender.com/health) |
 
 *(To run locally in under 60 seconds with Docker Compose, see [Quick Start](#quick-start)).*
 
@@ -362,31 +362,43 @@ All endpoints return standard JSON and include strict parameter validation. Inva
 
 ---
 
-## Deployment Guide (Vercel & Heroku)
+## Deployment Guide (Vercel & Render)
 
 ### Frontend Deployment (Vercel)
-1. Fork or push this repository to GitHub.
+1. Push this repository to GitHub.
 2. In the Vercel Dashboard, select **Add New Project** and import the repository.
 3. Configure the build settings:
    * **Root Directory**: `frontend`
    * **Framework Preset**: `Vite`
    * **Build Command**: `pnpm build` (or `npm run build`)
    * **Output Directory**: `dist`
-4. Set the Environment Variable:
-   * `VITE_API_BASE_URL`: URL of your deployed backend (e.g., `https://windsight-api.herokuapp.com`).
-5. Deploy. `frontend/vercel.json` automatically handles SPA routing rewrites.
+4. Set the Environment Variable in Vercel:
+   * `VITE_API_BASE_URL`: `https://hs-1234-ss-abc.onrender.com`
+5. Deploy. `frontend/vercel.json` automatically handles client-side SPA routing rewrites.
+   * **Live Frontend**: [https://wind-sight-flax.vercel.app](https://wind-sight-flax.vercel.app)
 
-### Backend Deployment (Heroku / Container / Render)
-1. Build using the provided multi-stage Dockerfile or standard Python buildpack:
+### Backend Deployment (Render)
+1. In the [Render Dashboard](https://dashboard.render.com), create a new **Web Service** connected to your repository.
+2. Configure service settings:
+   * **Root Directory**: `backend`
+   * **Runtime**: `Python 3` (or Docker using `./backend/Dockerfile`)
+   * **Build Command**:
+     ```bash
+     curl -LsSf https://astral.sh/uv/install.sh | sh && $HOME/.local/bin/uv sync --frozen --no-dev
+     ```
+   * **Start Command**:
+     ```bash
+     $HOME/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+     ```
+3. Set the Environment Variables in Render:
+   * `CORS_ORIGINS`: `https://wind-sight-flax.vercel.app,http://localhost:5173,http://localhost:3000`
+   * `DATA_DIR`: `./data`
+4. Verify deployment health via:
    ```bash
-   heroku create windsight-api
-   heroku stack:set container
-   heroku container:push web --app windsight-api
-   heroku container:release web --app windsight-api
+   curl https://hs-1234-ss-abc.onrender.com/health
    ```
-2. Configure Environment Variables in Heroku / Render:
-   * `CORS_ORIGINS`: Comma-separated list of your Vercel frontend domain (e.g. `https://windsight-web.vercel.app,http://localhost:5173`).
-3. Verify health via `curl https://windsight-api.herokuapp.com/health`.
+   * **Live REST API**: [https://hs-1234-ss-abc.onrender.com](https://hs-1234-ss-abc.onrender.com)
+   * **Interactive Swagger Documentation**: [https://hs-1234-ss-abc.onrender.com/docs](https://hs-1234-ss-abc.onrender.com/docs)
 
 ---
 
