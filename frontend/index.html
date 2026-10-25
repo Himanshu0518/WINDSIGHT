@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="WindSight - day-ahead wind forecast intelligence for UK power procurement. Forecast vs. actual wind generation, accuracy metrics and forecast revisions for January 2026."
+    />
+    <title>WindSight · Day-Ahead Wind Forecast Intelligence</title>
+    <script>
+      // Apply the stored theme before first paint to avoid a flash of the
+      // wrong colour scheme. Kept outside React on purpose.
+      ;(function () {
+        try {
+          var theme = localStorage.getItem('windsight-theme') || 'system'
+          var dark =
+            theme === 'dark' ||
+            (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (error) {
+          /* ignore */
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

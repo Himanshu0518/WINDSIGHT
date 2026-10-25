@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    /* Import alias (must match vite.config.ts); also mirrored in tsconfig.app.json */
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
