@@ -30,3 +30,14 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+
+.oxlintrc.json is a configuration file for Oxlint, a fast JavaScript and TypeScript code linter.
+What is Oxlint?
+Oxlint is a tool that analyzes your code to detect:
+- Unused variables and imports
+- Potential bugs
+- Incorrect JavaScript/TypeScript patterns
+- Violations of coding rules
+- React-related issues
+It's similar to ESLint, but Oxlint is written in Rust and is generally much faster.
