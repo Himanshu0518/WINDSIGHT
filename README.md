@@ -1,4 +1,4 @@
-# WindSight: Day-Ahead Wind Forecast Intelligence & Error Evaluation
+# WindSight — Day-Ahead Wind Forecast Intelligence & Error Evaluation
 
 [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.162+-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com)
@@ -7,83 +7,124 @@
 [![Vite 6](https://img.shields.io/badge/Vite-6-646cff.svg?logo=vite)](https://vitejs.dev/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind-v4-38b2ac.svg?logo=tailwindcss)](https://tailwindcss.com/)
 [![Docker](https://img.shields.io/badge/Docker-compose-2496ed.svg?logo=docker)](https://www.docker.com/)
-[![Tests Passing](https://img.shields.io/badge/tests-40%2F40%20passed-brightgreen.svg)](#test-suite)
-[![Coverage](https://img.shields.io/badge/coverage-100%25%20(1488%2F1488)-success.svg)](#january-2026-findings)
+[![Tests](https://img.shields.io/badge/tests-40%2F40%20passed-brightgreen.svg)](#test-suite)
+[![Coverage](https://img.shields.io/badge/interval_coverage-100%25%20(1488%2F1488)-success.svg)](#january-2026-findings)
 
-An enterprise-grade forecasting intelligence platform built for **UK Energy Utility Trading Desks** procuring wholesale power on the day-ahead electricity market (EPEX SPOT / N2EX). WindSight enables trading teams to quantify wind generation availability, account for weather-driven intermittency, size residual thermal plant requirements, and evaluate forecast accuracy quantitatively to hedge imbalance price risk.
+A forecasting intelligence platform built for **UK energy utility trading desks** procuring wholesale power on the day-ahead electricity market (EPEX SPOT / N2EX). WindSight identifies the exact wind generation forecast available at the point of procurement decision, quantifies its historical accuracy across all 1,488 half-hour settlement intervals in January 2026, and surfaces the empirical bias that traders must de-rate to avoid imbalance penalty exposure.
 
----
-
-## Live Deployment Links
-
-| Component | Target Platform | Live URL / Status | Interactive Docs |
-|---|---|---|---|
-| **Frontend Web App** | Vercel | [https://wind-sight-flax.vercel.app](https://wind-sight-flax.vercel.app) | [Application UI](https://wind-sight-flax.vercel.app) |
-| **Backend REST API** | Render | [https://hs-1234-ss-abc.onrender.com](https://hs-1234-ss-abc.onrender.com) | [/docs (Swagger UI)](https://hs-1234-ss-abc.onrender.com/docs) |
-| **Service Healthcheck** | Render | [https://hs-1234-ss-abc.onrender.com/health](https://hs-1234-ss-abc.onrender.com/health) | [/health](https://hs-1234-ss-abc.onrender.com/health) |
-
-*(To run locally in under 60 seconds with Docker Compose, see [Quick Start](#quick-start)).*
+> **Live Application** — [wind-sight-flax.vercel.app](https://wind-sight-flax.vercel.app)  
+> **Live REST API** — [hs-1234-ss-abc.onrender.com/docs](https://hs-1234-ss-abc.onrender.com/docs)
 
 ---
 
-## Business Problem & Context
+## Table of Contents
 
-In the UK wholesale electricity market, energy utilities must submit bids to the day-ahead auction (typically closing between 11:00 and 12:00 UK local time, D-1) to serve forecasted consumer electricity demand during the delivery day (D).
-
-Because wind power generation is weather-dependent and non-dispatchable:
-1. **Decision Dilemma**: A procurement manager must determine **how much additional dispatchable generation** (e.g., Combined Cycle Gas Turbines [CCGT] or peaker thermal assets) must be contracted on the wholesale market.
-2. **Information Asymmetry & Timing**: Elexon continuously publishes forecast updates (`WINDFOR`). However, traders can only rely on forecasts **available before their internal day-ahead decision cutoff** (set by default to **10:00 Europe/London, D-1**). Forecast revisions published after this cutoff are legally and operationally useless for day-ahead auction commitments.
-3. **Imbalance Cost Risk**: Under-forecasting leaves the utility with surplus thermal power (sold at distress cashout prices); over-forecasting leaves the utility short, triggering punitive System Buy Price (SBP) imbalance charges levied by Elexon EMR.
-
-### Platform Objectives
-* **Pre-Cutoff Forecast Identification**: Surface the exact, latest wind forecast available at decision time (10:00 UK local time, D-1) for every settlement period in January 2026, while explicitly tracking and separating post-cutoff forecast revisions.
-* **Rigorous Error Quantification**: Calculate industry-standard metrics (**MAE, RMSE, Bias, and MAPE**) across all 1,488 delivery intervals to provide traders with empirical uncertainty bands for thermal hedging.
+- [Business Problem](#business-problem)
+- [What WindSight Delivers](#what-windsight-delivers)
+- [January 2026 Findings](#january-2026-findings)
+- [System Architecture](#system-architecture)
+- [Core Domain Logic](#core-domain-logic)
+- [Repository Structure](#repository-structure)
+- [Quick Start](#quick-start)
+- [Test Suite](#test-suite)
+- [API Reference](#api-reference)
+- [Data Pipeline](#data-pipeline)
+- [Deployment](#deployment)
+- [AI Tooling Disclosure](#ai-tooling-disclosure)
+- [License](#license)
 
 ---
 
-## January 2026 Analytical Findings
+## Business Problem
 
-Analysis conducted across the complete UK national wind fleet for January 2026 (`2026-01-01` to `2026-01-31`):
+In the UK wholesale electricity market, energy utilities must submit bids to the **day-ahead auction** (closing ~11:00–12:00 UK time, D-1) to cover their forecasted consumer demand during the delivery day (D).
 
-| Metric | Measured Value | Practical Trading Implication |
+Wind generation is weather-dependent and non-dispatchable. This creates three compounding risks:
+
+1. **Sizing Residual Thermal Procurement** — The procurement desk must determine how much additional dispatchable capacity (CCGT, peaker gas, or interconnector imports) to contract beyond expected renewable output. Getting this wrong is expensive in both directions.
+
+2. **Information Timing Constraints** — Elexon continuously publishes updated wind forecasts (`WINDFOR`). However, only forecasts available **before the desk's internal decision cutoff** (default: **10:00 Europe/London, D-1**) can legally inform auction bids. Any forecast revision published after this deadline — however accurate — is operationally useless for the day-ahead commitment.
+
+3. **Imbalance Cost Exposure** — Over-forecasting wind leaves the utility short at delivery, triggering punitive **System Buy Price (SBP)** cashout charges from Elexon. Under-forecasting leaves surplus thermal generation that must be sold at distressed cashout prices. Both outcomes erode trading margins.
+
+### What WindSight Delivers
+
+WindSight provides the two components that requirement explicitly scoped:
+
+| Requirement | Implementation |
+|---|---|
+| **"Clearly understand the latest renewable generation forecasts available when they need to make decisions"** | For every half-hour settlement period, WindSight identifies the exact pre-cutoff forecast using a binary-search selection algorithm (`bisect_right`) against publication timestamps. Post-cutoff revisions are tracked separately but never leaked into the decision baseline. |
+| **"Evaluate the accuracy of the renewable generation forecasts quantitatively, so that they can make their decisions considering the quantified error"** | Four industry-standard error metrics (MAE, RMSE, Bias, MAPE) are computed across all 1,488 intervals with 100% coverage. Daily breakdowns surface volatility patterns. The measured **+1,840 MW over-forecast bias** directly tells traders how much to de-rate the raw forecast. |
+
+The resulting procurement formula becomes:
+
+```
+Thermal Purchase = Consumer Demand − (Wind Forecast − Bias Adjustment)
+```
+
+Consumer demand is proprietary portfolio data that varies per utility — correctly excluded from this scope per the requirement constraint: *"we consider the national level generation of actuals and forecasts of wind power available from Elexon alone (no other data beyond this)."*
+
+---
+
+## January 2026 Findings
+
+Complete analysis across the UK national wind fleet — 31 delivery days, 48 settlement intervals per day, **1,488 intervals evaluated with zero gaps**:
+
+| Metric | Value | Trading Implication |
 |---|---|---|
-| **Evaluated Intervals** | **1,488 / 1,488 (100.0% coverage)** | Zero missing delivery periods; 48 settlement intervals evaluated per day. |
-| **Mean Absolute Error (MAE)** | **2,126.12 MW** | On average, day-ahead expected wind deviated by ~2.13 GW from metered outturn. |
-| **Root Mean Squared Error (RMSE)** | **2,620.80 MW** | Highlights substantial volatility penalty during fast-moving storm fronts. |
-| **Mean Signed Bias** | **+1,840.30 MW** | **Persistent over-forecast bias**: the day-ahead forecast routinely overpredicted actual wind outturn. |
-| **Mean Absolute Percentage Error (MAPE)** | **22.13%** | Evaluated strictly on non-zero actuals; zero-actual denominator distortion prevented. |
+| **Intervals Evaluated** | **1,488 / 1,488** (100.0%) | Zero missing delivery periods — full month, complete data integrity. |
+| **Mean Absolute Error (MAE)** | **2,126.12 MW** | Day-ahead wind forecasts deviate from metered outturn by ~2.13 GW on average. |
+| **Root Mean Squared Error (RMSE)** | **2,620.80 MW** | Large errors during storm fronts disproportionately penalise portfolios — RMSE captures this tail risk. |
+| **Mean Signed Bias** | **+1,840.30 MW** | **Persistent over-forecast**: the day-ahead baseline routinely overstated actual wind output. |
+| **Mean Absolute Percentage Error (MAPE)** | **22.13%** | Computed strictly on non-zero actuals; zero-denominator intervals excluded to prevent distortion. |
 
-> **Key Trader Takeaway**: With a positive bias of **+1,840 MW**, the utility desk relying naively on day-ahead wind forecasts consistently ran short in real time. Traders should apply an empirical downward de-rating of ~1.8 GW to day-ahead renewable forecasts or reserve equivalent fast-ramping thermal capacity to avoid high cashout penalties.
+> **Key Takeaway for the Trading Desk**: A naive reliance on the raw day-ahead wind forecast left the desk **~1.8 GW short** in real-time delivery across January 2026. Traders should apply an empirical downward correction of approximately **1,840 MW** to the forecast baseline — or equivalently reserve that capacity in fast-ramping thermal backup — to mitigate System Buy Price imbalance penalties.
 
 ---
 
 ## System Architecture
 
-The solution uses a decoupled client-server architecture designed for zero cold-start latency, strict time-travel prevention, and offline resilience:
+Decoupled client-server architecture with zero cold-start latency, strict temporal integrity, and offline resilience:
 
 ![System Architecture](mermaid-diagram.png)
 
+| Layer | Technology | Design Rationale |
+|---|---|---|
+| **Frontend** | React 19, TypeScript 5.8, Vite 6, Tailwind CSS v4, Recharts | Type-safe SPA with responsive charts, loading skeletons, and dark/light theme. Deployed to Vercel with SPA routing rewrites. |
+| **Backend** | Python 3.13, FastAPI, Pydantic v2, UV | Pre-validated dataset loaded once at application startup — all requests served from in-memory store with sub-2ms latency. No external API calls at request time. |
+| **Data Pipeline** | Custom Elexon BMRS ingestion script | Handles 7-day API window limits, settlement-date vs. publish-time semantics, atomic file writes, and deduplication. |
+| **Infrastructure** | Docker Compose, Nginx, Vercel, Render | Multi-stage Docker builds. Production Nginx config with immutable asset caching and SPA fallback routing. |
+
 ---
 
-## Domain Methodology & Engineering Highlights
+## Core Domain Logic
 
-### 1. The Decision Cutoff Rule (`p* = max { p : p <= c_t }`)
-* For any delivery interval $t$, the decision cutoff $c_t$ is defined as **10:00 UK local time (Europe/London) on the day prior to delivery ($D-1$)**.
-* The algorithm performs a binary search (`bisect_right`) across publication timestamps to select the latest forecast generated before the cutoff.
-* **No Lookahead Bias**: Any forecast published at $10:01$ or later on $D-1$ is strictly excluded from the day-ahead procurement baseline.
+### 1. Decision Cutoff Rule
 
-### 2. Temporal Alignment: 30-Minute Settlement vs. 60-Minute Forecasts
-* **Actuals (`FUELHH`)**: Reported at 30-minute settlement period resolution.
-* **Forecasts (`WINDFOR`)**: Published at 60-minute resolution.
-* **Resolution**: WindSight explicitly broadcasts the hourly forecast value across both half-hour intervals it covers (e.g., an 11:00 UTC hourly forecast is mapped to both `11:00` and `11:30` intervals).
+For any delivery interval *t*, the cutoff *c_t* is **10:00 UK local time (Europe/London)** on the day prior to delivery (D-1). The selected forecast is:
+
+```
+p* = max { p : publish_time(p) ≤ c_t }
+```
+
+The algorithm uses `bisect_right` across sorted publication timestamps to find the latest eligible forecast in O(log n) time. **No lookahead bias**: a forecast published at 10:01 on D-1 is strictly excluded, even if it would have been more accurate.
+
+### 2. Temporal Resolution Alignment
+
+| Dataset | Resolution | Alignment Strategy |
+|---|---|---|
+| `FUELHH` (Actuals) | 30-minute settlement periods | Used as-is — native half-hourly granularity. |
+| `WINDFOR` (Forecasts) | 60-minute intervals | Each hourly forecast is explicitly broadcast to both half-hour intervals it covers (e.g., 11:00 UTC forecast maps to both 11:00 and 11:30 slots). |
+
+This 1-to-2 broadcast mapping is documented, tested, and deterministic — not an implicit assumption.
 
 ### 3. Missing Data Policy
-* Missing data is **never coerced to 0 MW** (which would artificially inflate error and bias).
-* An interval enters error metrics if and only if **both** an eligible forecast and metered actual exist. Intervals lacking data are clearly isolated with visual badges and factored into `coverage_percent`.
 
-### 4. Zero In-Flight Latency & Resilience
-* The backend loads the pre-validated January 2026 dataset once during FastAPI application lifespan.
-* Incoming client requests execute filtering and metrics calculation entirely in-memory with sub-millisecond response times (`< 2ms`), eliminating external network failure risks during trader presentations.
+Missing data is **never coerced to 0 MW**. Doing so would artificially inflate error metrics and bias. An interval contributes to accuracy metrics if and only if both an eligible forecast and a metered actual exist. Missing intervals are counted separately (`missing_forecast_intervals`, `missing_actual_intervals`) and reflected in `coverage_percent`.
+
+### 4. Zero In-Flight Latency
+
+The backend loads the pre-validated January 2026 dataset once during the FastAPI application lifespan event. All subsequent client requests execute filtering and metric computation entirely in-memory (<2ms), eliminating runtime dependency on Elexon API availability.
 
 ---
 
@@ -91,150 +132,119 @@ The solution uses a decoupled client-server architecture designed for zero cold-
 
 ```
 windsight/
-├── .env.example               # Template environment configuration
-├── .gitignore                 # Git ignore rules (node_modules, venvs, caches)
-├── docker-compose.yml         # Multi-container orchestration (API + Web)
-├── README.md                  # Comprehensive production documentation
-├── Requirements.md            # Original client specification & deliverables
-├── mermaid-diagram.png        # System architecture diagram
+├── docker-compose.yml              # One-command multi-container orchestration
+├── mermaid-diagram.png             # System architecture diagram
+├── .env.example                    # Template environment variables
 │
-├── backend/                   # Python FastAPI Backend
-│   ├── Dockerfile             # Multi-stage production Python 3.13 image
-│   ├── .dockerignore          # Docker build exclusion rules
-│   ├── pyproject.toml         # UV/PEP 621 package dependencies & pytest config
-│   ├── uv.lock                # Deterministic dependency lockfile
-│   ├── main.py                # Standalone development entrypoint
+├── backend/                        # Python 3.13 + FastAPI
+│   ├── Dockerfile                  # Multi-stage production image
+│   ├── pyproject.toml              # PEP 621 dependencies (UV-managed)
+│   ├── uv.lock                     # Deterministic lockfile
+│   ├── main.py                     # Development entrypoint
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py            # FastAPI app factory, CORS, lifespan data load
-│   │   ├── config.py          # Environment settings with fallback defaults
-│   │   ├── timeutils.py       # UTC parsing, London timezone, DST & cutoff logic
+│   │   ├── main.py                 # App factory — CORS, lifespan data load
+│   │   ├── config.py               # Environment settings with validated defaults
+│   │   ├── timeutils.py            # UTC parsing, London timezone, DST handling
 │   │   ├── api/
-│   │   │   ├── __init__.py
-│   │   │   └── routes.py      # REST endpoints (/health, /overview, /forecasts, etc.)
+│   │   │   └── routes.py           # REST endpoints with parameter validation
 │   │   ├── schemas/
-│   │   │   ├── __init__.py
-│   │   │   └── forecast.py    # Strict Pydantic v2 serialization models
+│   │   │   └── forecast.py         # Pydantic v2 response models
 │   │   └── services/
-│   │       ├── __init__.py
-│   │       ├── data_loader.py # In-memory AnalysisStore and JSON parser
-│   │       ├── elexon_client.py # Robust BMRS HTTP client (7-day windowing, retries)
-│   │       ├── forecast_selection.py # Core cutoff rule, bisect matching, Interval entity
-│   │       └── metrics.py     # MAE, RMSE, Bias, MAPE & daily aggregation engine
+│   │       ├── data_loader.py      # In-memory AnalysisStore & JSON parser
+│   │       ├── elexon_client.py    # BMRS HTTP client (7-day windowing, retries)
+│   │       ├── forecast_selection.py # Cutoff rule, bisect selection, Interval entity
+│   │       └── metrics.py          # MAE, RMSE, Bias, MAPE & daily aggregation
 │   ├── data/
-│   │   ├── actuals.json       # Cleaned FUELHH wind generation (1,488 intervals)
-│   │   ├── forecasts.json     # Complete WINDFOR publication history (2.9 MB)
-│   │   ├── analysis.json      # Pre-matched day-ahead dataset served by API
-│   │   └── raw/               # Downloaded raw Elexon API response payloads
+│   │   ├── actuals.json            # Cleaned FUELHH wind generation (1,488 intervals)
+│   │   ├── forecasts.json          # Complete WINDFOR publication history (~2.9 MB)
+│   │   ├── analysis.json           # Pre-matched day-ahead dataset served by API
+│   │   └── raw/                    # Raw Elexon API response payloads
 │   └── tests/
-│       ├── test_forecast_selection.py # Unit tests for cutoff rules & broadcast
-│       └── test_metrics.py            # Unit tests for statistical accuracy calculations
+│       ├── test_forecast_selection.py  # Cutoff rules, broadcast mapping, edge cases
+│       └── test_metrics.py             # Statistical accuracy & zero-actual handling
 │
-├── frontend/                  # React 19 + TypeScript + Vite SPA
-│   ├── Dockerfile             # Multi-stage build (Node 24 -> Nginx Alpine)
-│   ├── nginx.conf             # Production Nginx reverse-proxy & SPA routing
-│   ├── vercel.json            # Vercel deep-link rewrites configuration
-│   ├── package.json           # Frontend dependencies (React 19, Recharts, Tailwind v4)
-│   ├── pnpm-lock.yaml         # Deterministic pnpm lockfile
-│   ├── vite.config.ts         # Vite bundler config with path aliases
-│   ├── index.html             # HTML5 shell with Google Font typography
+├── frontend/                       # React 19 + TypeScript + Vite 6 SPA
+│   ├── Dockerfile                  # Multi-stage build (Node 24 → Nginx Alpine)
+│   ├── nginx.conf                  # Production reverse-proxy & SPA routing
+│   ├── vercel.json                 # Vercel SPA rewrite configuration
+│   ├── package.json                # Dependencies (React 19, Recharts, Tailwind v4)
+│   ├── pnpm-lock.yaml              # Deterministic pnpm lockfile
+│   ├── vite.config.ts              # Vite bundler config with path aliases
+│   ├── index.html                  # HTML5 shell with Google Font typography
 │   └── src/
-│       ├── App.tsx            # Main shell with routing & layout wrappers
-│       ├── main.tsx           # React DOM bootstrap
-│       ├── index.css          # Design system, CSS variables & typography
-│       ├── health-context.tsx # Global API connection & dataset health monitor
+│       ├── App.tsx                  # Root shell — routing & layout
+│       ├── main.tsx                 # React DOM bootstrap
+│       ├── index.css               # Design system tokens & typography
+│       ├── health-context.tsx      # Global API health monitor
 │       ├── pages/
-│       │   ├── dashboard.tsx        # Executive summary, KPI cards, dual chart, daily trends
-│       │   ├── prediction-data.tsx  # Forecast publication revision history & target hour drilldown
-│       │   └── actual-data.tsx      # FUELHH metered outturn, extremes & interval detail
+│       │   ├── dashboard.tsx       # Executive KPIs, dual chart, daily trends
+│       │   ├── prediction-data.tsx # Forecast revision history & cutoff drill-down
+│       │   └── actual-data.tsx     # Metered outturn, extremes & interval detail
 │       ├── components/
-│       │   ├── app-header.tsx       # Navigation bar with live health indicator & theme toggle
-│       │   ├── app-sidebar.tsx      # Collapsible navigation sidebar
-│       │   ├── forecast-chart.tsx   # Recharts dual-series line chart (forecast vs. actual)
-│       │   ├── accuracy-chart.tsx   # Recharts daily MAE bar + Bias line combo chart
-│       │   ├── evolution-chart.tsx  # Forecast revision trajectories with cutoff reference line
-│       │   ├── actual-chart.tsx     # Area chart of actual metered generation
-│       │   ├── interval-table.tsx   # Sortable/scrollable 48-interval settlement table
-│       │   ├── metric-card.tsx      # KPI stat card component with loading skeletons
-│       │   ├── delivery-date-picker.tsx # Constrained date selector (Jan 1-31, 2026)
-│       │   ├── data-state.tsx       # Async state handlers (loading skeleton, error retry)
-│       │   └── ui/                  # Shadcn-inspired accessible component primitives
-│       ├── hooks/                   # Custom hooks (useApi, useMobile)
-│       ├── lib/                     # Utilities (format, time parsing, cn helper)
-│       ├── services/api.ts          # Type-safe Fetch API client
-│       └── types/forecast.ts        # TypeScript interfaces matching backend models
+│       │   ├── app-header.tsx      # Nav bar with health indicator & theme toggle
+│       │   ├── app-sidebar.tsx     # Collapsible navigation sidebar
+│       │   ├── forecast-chart.tsx  # Dual-series line chart (forecast vs. actual)
+│       │   ├── accuracy-chart.tsx  # Daily MAE bar + Bias line combo chart
+│       │   ├── evolution-chart.tsx # Forecast revision trajectories with cutoff line
+│       │   ├── actual-chart.tsx    # Area chart of metered generation
+│       │   ├── interval-table.tsx  # Sortable 48-interval settlement table
+│       │   ├── metric-card.tsx     # KPI stat card with loading skeleton
+│       │   ├── delivery-date-picker.tsx  # Date selector (Jan 1–31, 2026)
+│       │   ├── data-state.tsx      # Loading/error/retry state handlers
+│       │   └── ui/                 # Accessible component primitives
+│       ├── hooks/                  # Custom hooks (useApi, useMobile)
+│       ├── lib/                    # Utilities (formatting, time parsing)
+│       ├── services/api.ts         # Type-safe Fetch API client
+│       └── types/forecast.ts       # TypeScript interfaces matching backend models
 │
 └── scripts/
-    └── download_data.py       # Elexon BMRS ingestion script (atomic file generation)
+    └── download_data.py            # Elexon BMRS ingestion (atomic file writes)
 ```
 
 ---
 
 ## Quick Start
 
-### Option 1: One-Command Docker Compose (Recommended)
-
-Run both the FastAPI backend and React frontend via Docker Compose:
+### Option 1: Docker Compose (Recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/Himanshu0518/hs-1234-ss-abc.git
-cd hs-1234-ss-abc
+git clone https://github.com/Himanshu0518/WINDSIGHT.git
+cd WINDSIGHT
 
-# Build and start both containers
 docker compose up --build
 ```
 
-Access the services:
-* **Frontend Application**: [http://localhost:8080](http://localhost:8080)
-* **Backend API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
-* **Backend Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
+| Service | URL |
+|---|---|
+| Frontend | [http://localhost:8080](http://localhost:8080) |
+| API Docs (Swagger) | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| Health Check | [http://localhost:8000/health](http://localhost:8000/health) |
 
----
+### Option 2: Local Development
 
-### Option 2: Local Development Setup
+**Prerequisites**: Python 3.13+ with [`uv`](https://github.com/astral-sh/uv), Node.js 20+ with [`pnpm`](https://pnpm.io/)
 
-#### Prerequisites
-* **Python**: 3.13+ installed with [`uv`](https://github.com/astral-sh/uv) (recommended) or standard `pip`
-* **Node.js**: 20+ with [`pnpm`](https://pnpm.io/) (v9 or v11)
-
-#### 1. Backend Setup
+#### Backend
 ```bash
 cd backend
-
-# Install dependencies deterministically
-uv sync
-
-# Run the test suite (40 tests)
-uv run pytest
-
-# Launch the FastAPI dev server (auto-reloads on code change)
-uv run fastapi dev
-# API runs at: http://127.0.0.1:8000
-# OpenAPI Docs: http://127.0.0.1:8000/docs
+uv sync                    # Install dependencies
+uv run pytest              # Run all 40 tests
+uv run fastapi dev         # Start dev server → http://127.0.0.1:8000
 ```
 
-#### 2. Frontend Setup
+#### Frontend
 ```bash
-# Open a new terminal
 cd frontend
-
-# Install dependencies
-pnpm install
-
-# Run static linting
-pnpm run lint
-
-# Start the Vite development server
-pnpm run dev
-# Frontend runs at: http://127.0.0.1:5173
+pnpm install               # Install dependencies
+pnpm run lint              # Static analysis
+pnpm run dev               # Start dev server → http://127.0.0.1:5173
 ```
 
 ---
 
 ## Test Suite
 
-The backend includes a comprehensive, deterministic unit test suite validating the forecast cutoff rule, 1-to-2 half-hour broadcast mapping, timezone conversions, and statistical accuracy metrics:
+40 deterministic unit tests covering the complete domain logic — cutoff selection, broadcast mapping, timezone edge cases, and all four statistical metrics:
 
 ```bash
 cd backend
@@ -242,8 +252,6 @@ uv run pytest -v
 ```
 
 ```
-collected 40 items
-
 tests/test_forecast_selection.py::test_cutoff_rule_standard_day PASSED
 tests/test_forecast_selection.py::test_forecast_selection_before_cutoff PASSED
 tests/test_forecast_selection.py::test_post_cutoff_revisions_excluded PASSED
@@ -258,43 +266,29 @@ tests/test_metrics.py::test_coverage_percentage_calculation PASSED
 ============================= 40 passed in 0.13s =============================
 ```
 
----
-
-## Data Ingestion & Pipeline (`scripts/download_data.py`)
-
-The bundled dataset covering January 2026 is already pre-generated and verified inside `backend/data/`. To re-download fresh data from Elexon BMRS:
-
-```bash
-# Full download from Elexon BMRS API (writes to backend/data/)
-uv run --project backend python scripts/download_data.py
-
-# Inspect sample normalized records
-uv run --project backend python scripts/download_data.py --sample
-
-# Diagnostic mode (allows partial data if Elexon has an outage)
-uv run --project backend python scripts/download_data.py --allow-partial
-```
-
-### Elexon BMRS Technical Handling:
-1. **7-Day Window Constraints**: Elexon rejects date ranges exceeding 7 days. The script automatically partitions January into 5 sliding chunks.
-2. **Settlement Date vs. Publish Time**: `FUELHH` accepts settlement dates, while `WINDFOR` filters on publication timestamps. A wider publish window is fetched so forecasts issued prior to January 1st for delivery on January 1st are preserved.
-3. **Atomic File Replacement**: Files are written to `.tmp` files and swapped atomically to prevent corrupted reads during server reload.
+Key test coverage areas:
+- **Cutoff boundary precision** — verifies a forecast published at exactly 10:00 is eligible while 10:01 is excluded
+- **Broadcast correctness** — confirms 60-min forecast maps to both half-hour settlement slots
+- **Zero-actual MAPE handling** — validates that zero-denominator intervals are excluded, not treated as infinity
+- **Bias directionality** — positive bias confirms over-forecast (forecast > actual)
 
 ---
 
-## API Specification
+## API Reference
 
-All endpoints return standard JSON and include strict parameter validation. Invalid date ranges return `400 Bad Request`; a missing dataset produces `503 Service Unavailable` with diagnostic instructions.
+All endpoints return JSON with strict Pydantic v2 validation. Invalid parameters → `400 Bad Request`. Missing dataset → `503 Service Unavailable` with diagnostic message.
 
-| Method | Endpoint | Query Parameters | Description |
+| Method | Endpoint | Parameters | Description |
 |---|---|---|---|
-| `GET` | `/health` | None | Service status, dataset interval counts, coverage % and cutoff definition. |
-| `GET` | `/api/overview` | `date=YYYY-MM-DD` | Day-ahead forecast vs. actual summary and headline metrics for a single delivery date. |
-| `GET` | `/api/forecasts` | `date=YYYY-MM-DD` | All 48 half-hour intervals with selected forecast (MW), actual (MW), error (MW), and timestamps. |
-| `GET` | `/api/accuracy` | `from=YYYY-MM-DD&to=YYYY-MM-DD` | Monthly aggregate metrics and day-by-day MAE/RMSE/Bias breakdown. |
-| `GET` | `/api/forecast-evolution` | `date=YYYY-MM-DD` | Every publication version issued for the target day, flagging pre-cutoff eligibility. |
+| `GET` | `/health` | — | Service status, dataset counts, coverage %, cutoff definition |
+| `GET` | `/api/overview` | `date` | Day-ahead summary: selected forecast, actual, headline metrics for one delivery date |
+| `GET` | `/api/forecasts` | `date` | All 48 half-hour intervals with forecast (MW), actual (MW), error (MW), timestamps |
+| `GET` | `/api/accuracy` | `from`, `to` | Aggregate + daily MAE/RMSE/Bias/MAPE breakdown across a date range |
+| `GET` | `/api/forecast-evolution` | `date` | Every publication revision for a delivery date, flagged pre/post-cutoff |
 
-### Sample Response (`GET /api/overview?date=2026-01-15`):
+<details>
+<summary><strong>Example Response</strong> — <code>GET /api/overview?date=2026-01-15</code></summary>
+
 ```json
 {
   "delivery_date": "2026-01-15",
@@ -318,76 +312,67 @@ All endpoints return standard JSON and include strict parameter validation. Inva
   "has_data": true
 }
 ```
+</details>
 
 ---
 
-## Deployment Guide (Vercel & Render)
+## Data Pipeline
 
-### Frontend Deployment (Vercel)
-1. Push this repository to GitHub.
-2. In the Vercel Dashboard, select **Add New Project** and import the repository.
-3. Configure the build settings:
-   * **Root Directory**: `frontend`
-   * **Framework Preset**: `Vite`
-   * **Build Command**: `pnpm build` (or `npm run build`)
-   * **Output Directory**: `dist`
-4. Set the Environment Variable in Vercel:
-   * `VITE_API_BASE_URL`: `https://hs-1234-ss-abc.onrender.com`
-5. Deploy. `frontend/vercel.json` automatically handles client-side SPA routing rewrites.
-   * **Live Frontend**: [https://wind-sight-flax.vercel.app](https://wind-sight-flax.vercel.app)
+The January 2026 dataset is pre-generated and bundled in `backend/data/`. To re-ingest from Elexon BMRS:
 
-### Backend Deployment (Render)
-1. In the [Render Dashboard](https://dashboard.render.com), create a new **Web Service** connected to your repository.
-2. Configure service settings:
-   * **Root Directory**: `backend`
-   * **Runtime**: `Python 3` (or Docker using `./backend/Dockerfile`)
-   * **Build Command**:
-     ```bash
-     curl -LsSf https://astral.sh/uv/install.sh | sh && $HOME/.local/bin/uv sync --frozen --no-dev
-     ```
-   * **Start Command**:
-     ```bash
-     $HOME/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
-     ```
-3. Set the Environment Variables in Render:
-   * `CORS_ORIGINS`: `https://wind-sight-flax.vercel.app,http://localhost:5173,http://localhost:3000`
-   * `DATA_DIR`: `./data`
-4. Verify deployment health via:
-   ```bash
-   curl https://hs-1234-ss-abc.onrender.com/health
-   ```
-   * **Live REST API**: [https://hs-1234-ss-abc.onrender.com](https://hs-1234-ss-abc.onrender.com)
-   * **Interactive Swagger Documentation**: [https://hs-1234-ss-abc.onrender.com/docs](https://hs-1234-ss-abc.onrender.com/docs)
+```bash
+uv run --project backend python scripts/download_data.py
+```
+
+### Elexon BMRS Technical Constraints Handled
+
+| Constraint | Solution |
+|---|---|
+| **7-day maximum query window** | January automatically partitioned into 5 sliding date chunks |
+| **Settlement date vs. publish time semantics** | `FUELHH` filtered by settlement date; `WINDFOR` filtered by publish time with a wider fetch window to capture forecasts issued before Jan 1 for delivery on Jan 1 |
+| **Atomic file integrity** | Data written to `.tmp` files and renamed atomically — prevents corrupted reads during server reload |
+| **Duplicate records** | Deduplicated by `(publish_time, start_time)` key; last occurrence retained; dropped count reported |
 
 ---
 
-## 10-Minute Video Demo Presentation Guide
+## Deployment
 
-As required by Section 3.1 of the assignment specification, the video must not exceed 10 minutes and should be split into two 5-minute sections:
+### Frontend → Vercel
 
-### Part 1: Client Pitch (Max 5 Minutes) — Energy Utility Trading Desk
-* **0:00 - 1:00 | The Problem**: Introduce the day-ahead procurement challenge for a UK electricity utility. Explain residual demand sizing: meeting retail consumer demand by determining how much thermal capacity (gas/coal) must be bought 24 hours in advance to balance renewable wind intermittency.
-* **1:00 - 2:30 | The Dashboard in Action**: Show the **Dashboard** (`/`). Highlight the headline metrics (MAE, Bias, RMSE). Explain that the **+1,840 MW positive bias** in January 2026 means wind forecasts routinely overstate generation, cautioning traders against under-buying thermal backup.
-* **2:30 - 3:45 | Decision Cutoff Rule**: Point out the pre-configured decision cutoff (**10:00 Europe/London, D-1**). Switch to the **Prediction Data** page (`/predictions`) and demonstrate the **Forecast Revisions Chart**. Show how the model tracks early forecast publications versus post-cutoff revisions that arrive too late for the auction.
-* **3:45 - 5:00 | Metered Outturn & Risk Mitigation**: Visit **Actual Data** (`/actuals`) to show metered `FUELHH` settlement periods. Summarize the business value: quantifiable error limits imbalance penalty costs and optimizes bidding strategy in the day-ahead auction.
+| Setting | Value |
+|---|---|
+| Root Directory | `frontend` |
+| Framework | Vite |
+| Build Command | `pnpm build` |
+| Output Directory | `dist` |
+| Environment Variable | `VITE_API_BASE_URL` = `https://hs-1234-ss-abc.onrender.com` |
 
-### Part 2: Technical Review (Max 5 Minutes) — Internal Tech Lead
-* **5:00 - 6:00 | Architectural Overview**: Walk through the decoupled architecture: FastAPI in Python 3.13, React 19 with Vite and Tailwind v4, in-memory dataset store, and Docker orchestration.
-* **6:00 - 7:00 | Ingestion & Data Integrity**: Walk through `scripts/download_data.py` and `forecast_selection.py`. Explain how Elexon's 7-day chunk limit was handled, how FUELHH 30-min settlement intervals were aligned with 60-min WINDFOR forecasts via broadcast mapping, and how duplicates were deduplicated.
-* **7:00 - 8:00 | Cutoff Algorithm & Lookahead Protection**: Show the bisect binary search algorithm in `forecast_selection.py`. Emphasize that lookahead bias is strictly prevented: forecasts published even 1 minute past cutoff are never leaked into the day-ahead baseline.
-* **8:00 - 9:00 | Test Coverage & Quality**: Show the test suite (`uv run pytest`) with all 40 tests passing in ~130ms, covering metric calculations, zero-actual MAPE edge cases, and cutoff boundaries. Show `oxlint` and TypeScript compilation (`tsc -b`).
-* **9:00 - 10:00 | Deployment & Packaging**: Highlight the production-ready Docker Compose setup, `nginx.conf` reverse proxy with immutable asset caching, and Vercel/Heroku configuration.
+`frontend/vercel.json` handles SPA client-side routing rewrites automatically.
+
+### Backend → Render
+
+| Setting | Value |
+|---|---|
+| Root Directory | `backend` |
+| Runtime | Python 3 (or Docker via `./backend/Dockerfile`) |
+| Build Command | `curl -LsSf https://astral.sh/uv/install.sh \| sh && $HOME/.local/bin/uv sync --frozen --no-dev` |
+| Start Command | `$HOME/.local/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| `CORS_ORIGINS` | `https://wind-sight-flax.vercel.app,http://localhost:5173,http://localhost:3000` |
+| `DATA_DIR` | `./data` |
+
+Verify deployment:
+```bash
+curl https://hs-1234-ss-abc.onrender.com/health
+```
 
 ---
 
 ## AI Tooling Disclosure
 
-In accordance with Section 2.2 of the assignment requirements:
-* Generative AI tools (including Claude and Gemini via Antigravity IDE) were utilized to accelerate boilerplate scaffolding, unit test test-case matrix generation, TailwindCSS styling refinement, and documentation drafting.
-* All domain logic, cutoff decision rules, mathematical metric calculations, API routes, and architectural decisions were reviewed, verified, and validated against the official Elexon BMRS documentation and UK settlement rules.
+As required by the assignment specification: generative AI tools (Kiro IDE) were used to assist with boilerplate scaffolding, test-case matrix generation, styling refinement, and documentation drafting. All domain logic — cutoff decision rules, metric formulations, temporal alignment strategy, and API design — was independently designed, reviewed, and validated against official Elexon BMRS documentation and UK electricity settlement rules.
 
 ---
 
 ## License
 
-This project is released under the **MIT License**. Wind generation actuals and forecast datasets are sourced from the **Elexon BMRS Data API** and are subject to the Elexon Open Data Licence.
+Released under the **MIT License**. Wind generation data sourced from the [Elexon BMRS Data API](https://bmrs.elexon.co.uk/) under the Elexon Open Data Licence.
